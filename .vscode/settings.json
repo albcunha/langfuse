@@ -28,5 +28,13 @@
     "editor.defaultFormatter": "Prisma.prisma"
   },
   "eslint.lintTask.enable": true,
-  "eslint.workingDirectories": ["./web", "./worker"]
+  "eslint.workingDirectories": [
+    "./web",
+    "./worker"
+  ],
+  "workbench.colorCustomizations": {
+    "activityBar.background": "#521440",
+    "titleBar.activeBackground": "#731C59",
+    "titleBar.activeForeground": "#FDF8FC"
+  }
 }

@@ -2764,6 +2764,72 @@ paths:
               schema: {}
       security:
         - BasicAuth: []
+
+    delete:
+      description: >-
+        Delete a prompt. If no version or label is specified, all versions of the prompt will be deleted. Allows folder structure by using %2F in replacement of / in the prompt name.
+      operationId: prompts_delete
+      tags:
+        - Prompts
+      parameters:
+        - name: promptName
+          in: path
+          description: The name of the prompt
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          description: The version of the prompt to be deleted.
+          required: false
+          schema:
+            type: integer
+            nullable: true
+        - name: label
+          in: query
+          description: The label of the prompt to be deleted.
+          required: false
+          schema:
+            type: string
+            nullable: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: ''
+          content:
+            application/json:
+              schema: {}
+        '403':
+          description: ''
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema: {}
+        '405':
+          description: ''
+          content:
+            application/json:
+              schema: {}
+      security:
+        - BasicAuth: []
+
   /api/public/v2/prompts:
     get:
       description: Get a list of prompt names with versions and labels
@@ -2903,6 +2969,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreatePromptRequest'
+
+    
+
   /api/public/scim/ServiceProviderConfig:
     get:
       description: >-
