@@ -56,6 +56,26 @@ service:
       path: /prompts
       request: CreatePromptRequest
       response: Prompt
+    delete:
+      docs: Delete a prompt. If no version or label is specified, all versions of the prompt will be deleted. Allows folder structure by using %2F in replacement of / in the prompt name.
+      method: DELETE
+      path: /prompts/{promptName}
+      path-parameters:
+        promptName:
+          type: string
+          docs: The name of the prompt
+      request:
+        name: DeletePromptRequest
+        query-parameters:
+          version:
+            type: optional<integer>
+            docs: The version of the prompt to be deleted.
+          label:
+            type: optional<string>
+            docs: The label of the prompt to be deleted.
+      response:
+        docs: A confirmation message.
+        type: string
 
 types:
   PromptMetaListResponse:

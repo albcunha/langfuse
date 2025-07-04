@@ -1,8 +1,10 @@
+import { generateId, nanoid } from 'ai';
+import { makeAPICall } from '@/src/__tests__/test-utils';
+import { parsePromptDependencyTags } from '@langfuse/shared';
+import { prisma } from '@langfuse/shared/src/db';
+import { v4 as uuidv4, v4 } from 'uuid';
 /** @jest-environment node */
 
-import { prisma } from "@langfuse/shared/src/db";
-import { makeAPICall } from "@/src/__tests__/test-utils";
-import { v4 as uuidv4, v4 } from "uuid";
 import {
   PromptSchema,
   PromptType,
@@ -10,8 +12,6 @@ import {
   type ChatMessage,
   type Prompt,
 } from "@langfuse/shared";
-import { parsePromptDependencyTags } from "@langfuse/shared";
-import { generateId, nanoid } from "ai";
 
 import { type PromptsMetaResponse } from "@/src/features/prompts/server/actions/getPromptsMeta";
 import {
@@ -2909,6 +2909,212 @@ describe("PATCH api/public/v2/prompts/[promptName]/versions/[version]", () => {
       });
     });
   });
+});
+
+describe("DELETE api/public/v2/prompts/{promptName}", () => {
+  describe("when deleting a prompt", () => {
+    it("should return a 401 if key is invalid", async () => {
+      const promptName = "any-prompt";
+      const response = await makeAPICall(
+        "DELETE",
+        `/api/public/v2/prompts/${encodeURIComponent(promptName)}`,
+        undefined,
+        "invalid-auth",
+      );
+      expect(response.status).toBe(401);
+    });
+
+    it("should return 404 if prompt to delete does not exist", async () => {
+      const { auth } = await createOrgProjectAndApiKey();
+      const promptName = "non-existent-prompt-" + nanoid();
+
+      const deleteResponse = await makeAPICall(
+        "DELETE",
+        `/api/public/v2/prompts/${encodeURIComponent(promptName)}`,
+        undefined,
+        auth,
+      );
+
+      expect(deleteResponse.status).toBe(404);
+      expect(deleteResponse.body).toEqual({
+        message: "Prompt not found",
+      });
+    });
+
+    it("should return 404 if trying to delete a prompt from another project", async () => {
+      const { projectId } = await createOrgProjectAndApiKey();
+      const { auth: otherAuth } = await createOrgProjectAndApiKey();
+      const promptName = "prompt-to-delete-wrong-project-" + nanoid();
+
+      await createPromptInDB({
+        name: promptName,
+        prompt: "version 1",
+        labels: [],
+        version: 1,
+        config: { model: "gpt-4" },
+        projectId,
+        createdBy: "user1",
+      });
+
+      const deleteResponse = await makeAPICall(
+        "DELETE",
+        `/api/public/v2/prompts/${encodeURIComponent(promptName)}`,
+        undefined,
+        otherAuth,
+      );
+
+      expect(deleteResponse.status).toBe(404);
+      expect(deleteResponse.body).toEqual({
+        message: "Prompt not found",
+      });
+
+      // Verify it was not deleted
+      const promptInDb = await prisma.prompt.findFirst({
+        where: { name: promptName, projectId },
+      });
+      expect(promptInDb).not.toBeNull();
+    });
+
+    it("should delete a prompt and all its versions", async () => {
+      const { projectId, auth } = await createOrgProjectAndApiKey();
+      const promptName = "prompt-to-delete-" + nanoid();
+
+      // Create two versions of the same prompt
+      await createPromptInDB({
+        name: promptName,
+        prompt: "version 1",
+        labels: ["production"],
+        version: 1,
+        config: { model: "gpt-4" },
+        projectId,
+        createdBy: "user1",
+      });
+      await createPromptInDB({
+        name: promptName,
+        prompt: "version 2",
+        labels: [],
+        version: 2,
+        config: { model: "gpt-4" },
+        projectId,
+        createdBy: "user1",
+      });
+
+      const promptsInDbBefore = await prisma.prompt.findMany({
+        where: { name: promptName, projectId },
+      });
+      expect(promptsInDbBefore.length).toBe(2);
+
+      const deleteResponse = await makeAPICall(
+        "DELETE",
+        `/api/public/v2/prompts/${encodeURIComponent(promptName)}`,
+        undefined,
+        auth,
+      );
+
+      expect(deleteResponse.status).toBe(204);
+
+      const promptsInDbAfter = await prisma.prompt.findMany({
+        where: { name: promptName, projectId },
+      });
+      expect(promptsInDbAfter.length).toBe(0);
+    });
+
+    it("should delete a specific version of a prompt", async () => {
+      const { projectId, auth } = await createOrgProjectAndApiKey();
+      const promptName = "prompt-with-versions-to-delete-" + nanoid();
+
+      // Create two versions of the same prompt
+      await createPromptInDB({
+        name: promptName,
+        prompt: "version 1",
+        labels: ["production"],
+        version: 1,
+        config: { model: "gpt-4" },
+        projectId,
+        createdBy: "user1",
+      });
+      await createPromptInDB({
+        name: promptName,
+        prompt: "version 2",
+        labels: [],
+        version: 2,
+        config: { model: "gpt-4" },
+        projectId,
+        createdBy: "user1",
+      });
+
+      const promptsInDbBefore = await prisma.prompt.findMany({
+        where: { name: promptName, projectId },
+      });
+      expect(promptsInDbBefore.length).toBe(2);
+
+      const deleteResponse = await makeAPICall(
+        "DELETE",
+        `/api/public/v2/prompts/${encodeURIComponent(promptName)}?version=1`,
+        undefined,
+        auth,
+      );
+
+      expect(deleteResponse.status).toBe(204);
+
+      const promptsInDbAfter = await prisma.prompt.findMany({
+        where: { name: promptName, projectId },
+        orderBy: { version: "asc" },
+      });
+      expect(promptsInDbAfter.length).toBe(1);
+      expect(promptsInDbAfter[0].version).toBe(2);
+    });
+
+    it("should delete a specific version of a prompt by label", async () => {
+      const { projectId, auth } = await createOrgProjectAndApiKey();
+      const promptName = "prompt-with-labels-to-delete-" + nanoid();
+      const labelToDelete = "to-delete";
+
+      // Create two versions of the same prompt
+      await createPromptInDB({
+        name: promptName,
+        prompt: "version 1",
+        labels: [labelToDelete],
+        version: 1,
+        config: { model: "gpt-4" },
+        projectId,
+        createdBy: "user1",
+      });
+      await createPromptInDB({
+        name: promptName,
+        prompt: "version 2",
+        labels: ["production"],
+        version: 2,
+        config: { model: "gpt-4" },
+        projectId,
+        createdBy: "user1",
+      });
+
+      const promptsInDbBefore = await prisma.prompt.findMany({
+        where: { name: promptName, projectId },
+      });
+      expect(promptsInDbBefore.length).toBe(2);
+
+      const deleteResponse = await makeAPICall(
+        "DELETE",
+        `/api/public/v2/prompts/${encodeURIComponent(
+          promptName,
+        )}?label=${labelToDelete}`,
+        undefined,
+        auth,
+      );
+
+      expect(deleteResponse.status).toBe(204);
+
+      const promptsInDbAfter = await prisma.prompt.findMany({
+        where: { name: promptName, projectId },
+        orderBy: { version: "asc" },
+      });
+      expect(promptsInDbAfter.length).toBe(1);
+      expect(promptsInDbAfter[0].version).toBe(2);
+    });
+  });
+
 });
 
 const isPrompt = (x: unknown): x is Prompt => {
